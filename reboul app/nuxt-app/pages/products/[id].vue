@@ -1,127 +1,61 @@
 <script setup lang="ts">
 import { useProductStore } from '~/stores/useProductStore'
 import { useCartStore } from '~/stores/useCartStore'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
-// Stores et Route
 const route = useRoute()
 const productStore = useProductStore()
 const cartStore = useCartStore()
 
-// États locaux de base
+// États
 const selectedSize = ref('')
 const quantity = ref(1)
 const currentImageIndex = ref(0)
-
-// États pour le zoom
 const isZoomed = ref(false)
-const zoomPosition = ref({ x: 0, y: 0 })
-const zoomLevel = ref(2)
-
-// États pour les fonctionnalités avancées
-const isFavorite = ref(false)
-const recentlyViewed = ref([])
-const showReviews = ref(false)
-const showSizeGuide = ref(false)
+const zoomPos = ref({ x: 0, y: 0 })
 
 // Obtenir le produit
 const product = computed(() => {
   return productStore.products.find(p => p.id === route.params.id)
 })
 
-// Stock status computed
-const stockStatus = computed(() => {
-  if (!product.value) return { text: '', class: '' }
-
-  const stock = product.value.stock
-  console.log('Stock actuel:', stock) // Pour déboguer
-
-  if (stock === 0) {
-    return {
-      text: 'Rupture de stock',
-      class: 'out-of-stock',
-      available: false
-    }
-  }
-
-  if (stock < 5) {
-    return {
-      text: `Plus que ${stock} en stock !`,
-      class: 'low-stock',
-      available: true
-    }
-  }
-
-  return {
-    text: 'En stock',
-    class: 'in-stock',
-    available: true
-  }
-})
-
-// Maximum quantity selector based on available stock
-const maxQuantity = computed(() => {
+// Calcul du stock total
+const totalStock = computed(() => {
   if (!product.value) return 0
-  return Math.min(product.value.stock, 10) // Maximum 10 ou le stock disponible
+  return Object.values(product.value.sizeStock).reduce((sum, stock) => sum + stock, 0)
 })
 
-
-
-// Charger les données
-onMounted(async () => {
-  await productStore.fetchProducts()
+// Calcul du stock disponible pour la taille sélectionnée
+const availableStock = computed(() => {
+  if (!product.value) return 0
+  if (!selectedSize.value) return totalStock.value
+  return product.value.sizeStock[selectedSize.value] || 0
 })
 
-// Ajouter au panier
-// Ajouter au panier
-const addToCart = () => {
-  if (!selectedSize.value) {
-    alert('Veuillez sélectionner une taille')
-    return
-  }
+// Tailles avec leur statut
+const sizesWithStock = computed(() => {
+  if (!product.value) return []
+  return Object.entries(product.value.sizeStock).map(([size, stock]) => ({
+    size,
+    stock,
+    status: getStockStatus(stock),
+    available: stock > 0
+  }))
+})
 
-  if (!product.value || product.value.stock < quantity.value) {
-    alert('Stock insuffisant')
-    return
-  }
-
-  try {
-    cartStore.addToCart(product.value, quantity.value, selectedSize.value)
-    alert('Produit ajouté au panier')
-  } catch (error) {
-    console.error('Erreur lors de l\'ajout au panier:', error)
-  }
+// Statut du stock
+const getStockStatus = (stock: number) => {
+  if (stock === 0) return { text: 'Rupture de stock', class: 'out-of-stock' }
+  if (stock < 5) return { text: `${stock} disponible${stock > 1 ? 's' : ''}`, class: 'low-stock' }
+  return { text: 'En stock', class: 'in-stock' }
 }
 
-// Avis clients simulés
-const reviews = ref([
-  { id: 1, author: "Jean D.", rating: 5, comment: "Excellent produit !" },
-  { id: 2, author: "Marie L.", rating: 4, comment: "Très satisfaite" }
-])
-
-
-
-
-// Produits recommandés
-const recommendedProducts = computed(() => {
-  if (!product.value) return []
-  return productStore.products
-      .filter(p => p.category === product.value?.category && p.id !== product.value?.id)
-      .slice(0, 4)
+// Quantité maximum sélectionnable
+const maxQuantity = computed(() => {
+  return Math.min(availableStock.value, 10)
 })
 
-// Liens de partage social
-const shareLinks = computed(() => {
-  const url = window.location.href
-  const title = product.value?.name
-  return {
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
-    twitter: `https://twitter.com/intent/tweet?url=${url}&text=${title}`,
-    pinterest: `https://pinterest.com/pin/create/button/?url=${url}&media=${product.value?.images[0]}&description=${title}`
-  }
-})
-
-// Fonctions
+// Gestion du zoom
 const handleZoom = (event: MouseEvent) => {
   if (!isZoomed.value) return
 
@@ -131,32 +65,44 @@ const handleZoom = (event: MouseEvent) => {
   const x = ((event.clientX - rect.left) / rect.width) * 100
   const y = ((event.clientY - rect.top) / rect.height) * 100
 
-  zoomPosition.value = { x, y }
+  zoomPos.value = { x, y }
 }
 
-const toggleFavorite = () => {
-  isFavorite.value = !isFavorite.value
+// Gestion des images
+const changeImage = (index: number) => {
+  currentImageIndex.value = index
+  isZoomed.value = false
 }
 
+// Ajouter au panier
+const addToCart = () => {
+  if (!selectedSize.value) {
+    alert('Veuillez sélectionner une taille')
+    return
+  }
 
-  if (product.value) {
+  if (!availableStock.value) {
+    alert('Stock insuffisant')
+    return
+  }
+
+  try {
     cartStore.addToCart(product.value, quantity.value, selectedSize.value)
     alert('Produit ajouté au panier')
-  }
-
-
-const updateRecentlyViewed = () => {
-  const recentProducts = JSON.parse(localStorage.getItem('recentlyViewed') || '[]')
-  if (product.value && !recentProducts.includes(product.value.id)) {
-    recentProducts.unshift(product.value.id)
-    localStorage.setItem('recentlyViewed', JSON.stringify(recentProducts.slice(0, 5)))
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout au panier:', error)
+    alert('Erreur lors de l\'ajout au panier')
   }
 }
 
-// Lifecycle hooks
+// Réinitialiser la quantité quand on change de taille
+watch(selectedSize, () => {
+  quantity.value = 1
+})
+
+// Charger les données
 onMounted(async () => {
   await productStore.fetchProducts()
-  updateRecentlyViewed()
 })
 </script>
 
@@ -168,31 +114,25 @@ onMounted(async () => {
     </div>
 
     <div v-else class="product-container">
-<!--      &lt;!&ndash; Promotion Banner &ndash;&gt;-->
-<!--      <div v-if="promoInfo.isOnSale" class="promo-banner">-->
-<!--        <span class="promo-text">-->
-<!--          {{ promoInfo.discountPercent }}% DE RÉDUCTION ! Offre se termine dans-->
-<!--          {{ Math.ceil((promoInfo.endDate - new Date()) / (1000 * 60 * 60 * 24)) }} jours-->
-<!--        </span>-->
-<!--      </div>-->
-
-      <!-- Left Side: Images with Zoom -->
+      <!-- Images Section -->
       <div class="product-images">
         <div
-            class="image-zoom-container"
+            class="main-image-container"
             @mousemove="handleZoom"
             @mouseenter="isZoomed = true"
             @mouseleave="isZoomed = false"
         >
-          <!-- Badges -->
+          <!-- Badges modifiés -->
           <div class="badges">
-    <span
-        v-if="stockStatus.text"
-        class="badge"
-        :class="stockStatus.class"
-    >
-              {{ stockStatus.text }}
-            </span>
+    <span v-if="totalStock === 0" class="badge out-of-stock">
+      Rupture de stock
+    </span>
+            <span v-else-if="selectedSize && availableStock < 5 && availableStock > 0" class="badge low-stock">
+      Plus que {{ availableStock }} en stock pour cette taille
+    </span>
+            <span v-else-if="totalStock < 5" class="badge low-stock">
+      Plus que {{ totalStock }} en stock
+    </span>
           </div>
 
           <img
@@ -201,8 +141,8 @@ onMounted(async () => {
               class="main-image"
               :class="{ 'zoomed': isZoomed }"
               :style="{
-              transform: isZoomed ? `scale(${zoomLevel})` : 'scale(1)',
-              transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`
+              transform: isZoomed ? 'scale(2)' : 'scale(1)',
+              transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`
             }"
           >
         </div>
@@ -212,161 +152,62 @@ onMounted(async () => {
               v-for="(image, index) in product.images"
               :key="index"
               :src="image"
-              :class="{ active: currentImageIndex === index }"
-              @click="currentImageIndex = index"
-              class="thumbnail"
+              :alt="`${product.name} - vue ${index + 1}`"
+              @click="changeImage(index)"
+              :class="['thumbnail', { active: currentImageIndex === index }]"
           >
         </div>
       </div>
 
-      <!-- Right Side: Product Info -->
+      <!-- Product Info -->
       <div class="product-info">
-        <!-- Header with Favorite -->
-        <div class="product-header">
-          <h1>{{ product.name }}</h1>
-          <button
-              @click="toggleFavorite"
-              class="favorite-button"
-              :class="{ active: isFavorite }"
-          >
-            ♥
-          </button>
-        </div>
-
-        <!-- Prix et Stock -->
-        <div class="price-stock-info">
-          <p class="price">{{ product.price }} €</p>
-          <p class="stock-text" :class="stockStatus.class">
-            {{ stockStatus.text }}
-          </p>
-        </div>
-
+        <h1>{{ product.name }}</h1>
+        <p class="price">{{ product.price }} €</p>
         <p class="description">{{ product.description }}</p>
 
-        <!-- Social Share -->
-        <div class="social-share">
-          <p>Partager:</p>
-          <div class="share-buttons">
-            <a :href="shareLinks.facebook" target="_blank" class="share-button facebook">Facebook</a>
-            <a :href="shareLinks.twitter" target="_blank" class="share-button twitter">Twitter</a>
-            <a :href="shareLinks.pinterest" target="_blank" class="share-button pinterest">Pinterest</a>
-          </div>
-        </div>
+        <!-- Size Selection -->
+        <div class="size-section">
+          <h3 class="size-title">Sélectionner une taille</h3>
 
-        <!-- Size Guide Button -->
-        <button @click="showSizeGuide = true" class="size-guide-button">
-          Guide des tailles
-        </button>
-
-        <!-- Tailles - ne s'affiche que si le produit est en stock -->
-        <div v-if="stockStatus.available" class="size-selector">
-          <p class="label">Taille</p>
-          <div class="size-buttons">
+          <div class="size-grid">
             <button
-                v-for="size in product.sizes"
-                :key="size"
-                :class="{ active: selectedSize === size }"
-                @click="selectSize(size)"
-                class="size-button"
+                v-for="sizeInfo in sizesWithStock"
+                :key="sizeInfo.size"
+                @click="selectedSize = sizeInfo.size"
+                :class="[
+                'size-button',
+                sizeInfo.status.class,
+                {
+                  'active': selectedSize === sizeInfo.size,
+                  'disabled': !sizeInfo.available
+                }
+              ]"
+                :disabled="!sizeInfo.available"
             >
-              {{ size }}
+              <span class="size">{{ sizeInfo.size }}</span>
+              <span class="stock-status">{{ sizeInfo.status.text }}</span>
             </button>
           </div>
         </div>
 
-
-
-        <!-- Message de rupture de stock -->
-        <div v-else class="out-of-stock-message">
-          Ce produit est actuellement indisponible
-        </div>
-
-        <!-- Quantité - seulement si en stock et taille sélectionnée -->
-        <div v-if="stockStatus.available && selectedSize" class="quantity-selector">
-          <p class="label">Quantité</p>
-          <select
-              v-model="quantity"
-          >
-            <option
-                v-for="n in maxQuantity"
-                :key="n"
-                :value="n"
-            >
-              {{ n }}
-            </option>
+        <!-- Quantity -->
+        <div v-if="selectedSize && availableStock > 0" class="quantity-section">
+          <h3 class="quantity-title">Quantité</h3>
+          <select v-model="quantity" class="quantity-select">
+            <option v-for="n in maxQuantity" :key="n" :value="n">{{ n }}</option>
           </select>
         </div>
 
-        <!-- Bouton Ajouter au panier -->
+        <!-- Add to Cart -->
         <button
             @click="addToCart"
             class="add-to-cart"
-            :disabled="!stockStatus.available"
+            :disabled="!selectedSize || availableStock === 0"
         >
-          {{ stockStatus.available ? 'Ajouter au panier' : 'Rupture de stock' }}
+          {{ !selectedSize ? 'Sélectionnez une taille' :
+            availableStock === 0 ? 'Rupture de stock' :
+                'Ajouter au panier' }}
         </button>
-
-        <!-- Reviews Section -->
-        <div class="reviews-section">
-          <button @click="showReviews = !showReviews" class="reviews-toggle">
-            Voir les avis ({{ reviews.length }})
-          </button>
-          <div v-if="showReviews" class="reviews-list">
-            <div v-for="review in reviews" :key="review.id" class="review">
-              <div class="review-header">
-                <span class="review-author">{{ review.author }}</span>
-                <div class="review-rating">
-                  ★★★★★
-                  <span :style="{ width: (review.rating * 20) + '%' }"></span>
-                </div>
-              </div>
-              <p class="review-comment">{{ review.comment }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Recommended Products -->
-    <div class="recommended-products" v-if="recommendedProducts.length > 0">
-      <h2>Vous aimerez aussi</h2>
-      <div class="recommended-grid">
-        <div
-            v-for="prod in recommendedProducts"
-            :key="prod.id"
-            class="recommended-card"
-        >
-          <img :src="prod.images[0]" :alt="prod.name">
-          <div class="recommended-info">
-            <h3>{{ prod.name }}</h3>
-            <p>{{ prod.price }} €</p>
-            <NuxtLink :to="`/products/${prod.id}`" class="view-more">
-              Voir le produit
-            </NuxtLink>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Size Guide Modal -->
-    <div v-if="showSizeGuide" class="modal">
-      <div class="modal-content">
-        <h2>Guide des tailles</h2>
-        <table class="size-table">
-          <tr>
-            <th>Taille</th>
-            <th>Tour de poitrine</th>
-            <th>Tour de taille</th>
-            <th>Tour de hanches</th>
-          </tr>
-          <tr v-for="size in ['S', 'M', 'L', 'XL']" :key="size">
-            <td>{{ size }}</td>
-            <td>{{ size === 'S' ? '88-92' : size === 'M' ? '92-96' : size === 'L' ? '96-100' : '100-104' }}</td>
-            <td>{{ size === 'S' ? '76-80' : size === 'M' ? '80-84' : size === 'L' ? '84-88' : '88-92' }}</td>
-            <td>{{ size === 'S' ? '94-98' : size === 'M' ? '98-102' : size === 'L' ? '102-106' : '106-110' }}</td>
-          </tr>
-        </table>
-        <button @click="showSizeGuide = false" class="close-modal">Fermer</button>
       </div>
     </div>
   </div>
@@ -381,17 +222,6 @@ onMounted(async () => {
   top: 100px;
 }
 
-/* Promo Banner */
-.promo-banner {
-  background: #ff4444;
-  color: white;
-  text-align: center;
-  padding: 10px;
-  margin-bottom: 20px;
-  border-radius: 4px;
-}
-
-/* Product Container */
 .product-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -399,53 +229,72 @@ onMounted(async () => {
 }
 
 /* Image Section */
-.image-zoom-container {
+.product-images {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.main-image-container {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
+  height: 600px;
 }
 
 .main-image {
   width: 100%;
-  height: 600px;
+  height: 100%;
   object-fit: cover;
-  transition: transform 0.1s ease;
   cursor: zoom-in;
+  transition: transform 0.3s ease-out;
 }
 
 .main-image.zoomed {
   cursor: zoom-out;
 }
 
-/* Styles des badges */
+/* Badges */
 .badges {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .badge {
-  display: inline-block;
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 13px;
   font-weight: 500;
 }
 
+.badge.low-stock {
+  background: rgba(255, 136, 0, 0.9);
+  color: white;
+}
 
+.badge.out-of-stock {
+  background: rgba(255, 68, 68, 0.9);
+  color: white;
+}
+
+/* Thumbnails */
 .thumbnail-gallery {
   display: flex;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 12px;
+  overflow-x: auto;
 }
 
 .thumbnail {
   width: 80px;
   height: 80px;
   object-fit: cover;
-  cursor: pointer;
   border-radius: 4px;
+  cursor: pointer;
   opacity: 0.6;
   transition: opacity 0.3s;
 }
@@ -456,27 +305,15 @@ onMounted(async () => {
 }
 
 /* Product Info */
-.product-header {
+.product-info {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.favorite-button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: #ddd;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.favorite-button.active {
-  color: #ff4444;
-}
-
-.price-info {
-  margin: 20px 0;
+.product-info h1 {
+  font-size: 28px;
+  margin: 0;
 }
 
 .price {
@@ -484,252 +321,154 @@ onMounted(async () => {
   font-weight: bold;
 }
 
-.original-price {
-  text-decoration: line-through;
-  color: #999;
-  margin-right: 10px;
-}
-
-.stock-info {
-  font-size: 14px;
+.description {
+  font-size: 16px;
+  line-height: 1.6;
   color: #666;
 }
-.stock-status {
-  padding: 5px 10px;
-  border-radius: 4px;
+
+/* Size Section */
+.size-section {
+  margin-top: 32px;
+}
+
+.size-title {
   font-size: 14px;
-  margin-top: 10px;
-}
-/* États du stock */
-.out-of-stock {
-  background: rgba(255, 68, 68, 0.9);
-  color: white;
-}
-
-.low-stock {
-  background: rgba(255, 136, 0, 0.9);
-  color: white;
-}
-
-.in-stock {
-  background: rgba(39, 174, 96, 0.9);
-  color: white;
-}
-
-.limited-stock {
-  color: #ffaa00;
-  background: #fff9e6;
-}
-
-/* Quantité */
-.quantity-selector {
-  margin: 20px 0;
-}
-
-.quantity-selector select {
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  width: 80px;
-}
-
-/* Prix et stock */
-.price-stock-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0;
-}
-
-.price {
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.stock-text {
-  font-size: 14px;
-}
-
-.stock-info.low {
-  color: #ff4444;
-}
-
-/* Social Share */
-.social-share {
-  margin: 20px 0;
-}
-
-.share-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.share-button {
-  padding: 8px 16px;
-  border-radius: 4px;
-  color: white;
-  text-decoration: none;
-  font-size: 14px;
-}
-
-.facebook { background: #3b5998; }
-.twitter { background: #1da1f2; }
-.pinterest { background: #bd081c; }
-
-/* Size Selection */
-.size-guide-button {
-  background: none;
-  border: none;
-  text-decoration: underline;
+  font-weight: 500;
   color: #666;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 15px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.size-buttons {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.size-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 8px;
 }
 
 .size-button {
-  padding: 10px 20px;
-  border: 1px solid #ddd;
-  background: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.size-button .size {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.size-button .stock-status {
+  font-size: 10px;
+  position: absolute;
+  bottom: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.size-button:hover .stock-status {
+  opacity: 1;
+}
+
+.size-button:hover:not(.disabled) {
+  background: #f8f8f8;
+  border-color: #999;
 }
 
 .size-button.active {
-  background: black;
+  background: #000;
+  border-color: #000;
   color: white;
-  border-color: black;
 }
 
-/* Quantity Selection */
-.quantity-selector select {
+.size-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #fafafa;
+}
+
+.size-button.out-of-stock {
+  border-color: #e5e5e5;
+  color: #999;
+}
+
+.size-button.low-stock {
+  border-color: #e5e5e5;
+}
+
+.size-button.in-stock {
+  border-color: #e5e5e5;
+}
+
+/* State colors only show on hover for a cleaner look */
+.size-button:hover.out-of-stock {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.size-button:hover.low-stock {
+  color: #ffffff;
+  border-color: #d97706;
+}
+
+.size-button:hover.in-stock {
+  color: #000;
+  border-color: #000;
+}
+
+/* Quantity Section */
+.quantity-section {
+  margin-top: 20px;
+}
+
+.quantity-title {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.quantity-select {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
   width: 100px;
 }
 
-/* Bouton ajouter au panier */
+/* Add to Cart Button */
 .add-to-cart {
-  width: 100%;
-  padding: 15px;
-  background: black;
+  margin-top: 12px;
+  padding: 16px 32px;
+  background: #000;
   color: white;
   border: none;
   border-radius: 4px;
-  cursor: pointer;
   font-size: 16px;
-  transition: all 0.3s ease;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
-.add-to-cart:hover {
+
+.add-to-cart:hover:not(:disabled) {
   background: #333;
 }
 
 .add-to-cart:disabled {
-  background: #cccccc;
+  background: #ccc;
   cursor: not-allowed;
 }
 
-/* Reviews Section */
-.reviews-section {
-  margin-top: 30px;
-  border-top: 1px solid #eee;
-  padding-top: 20px;
-}
-
-.review {
-  padding: 15px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.review-rating {
-  position: relative;
-  color: #ddd;
-}
-
-.review-rating span {
-  position: absolute;
-  left: 0;
-  top: 0;
-  overflow: hidden;
-  color: gold;
-}
-
-/* Size Guide Modal */
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  padding: 30px;
-  border-radius: 8px;
-  max-width: 800px;
-  width: 90%;
-}
-
-.size-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 20px 0;
-}
-
-.size-table th,
-.size-table td {
-  padding: 10px;
-  border: 1px solid #ddd;
+/* Loading State */
+.loading {
   text-align: center;
-}
-
-/* Recommended Products */
-.recommended-products {
-  margin-top: 60px;
-  padding-top: 40px;
-  border-top: 1px solid #eee;
-}
-
-.recommended-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
-  margin-top: 30px;
-}
-
-.recommended-card {
-  border: 1px solid #eee;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: transform 0.3s;
-}
-
-.recommended-card:hover {
-  transform: translateY(-5px);
-}
-
-.recommended-card img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-}
-
-.recommended-info {
-  padding: 15px;
+  padding: 40px;
+  color: #666;
 }
 
 /* Responsive Design */
@@ -738,31 +477,16 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 
-  .main-image {
+  .main-image-container {
     height: 400px;
   }
 
-  .modal-content {
-    width: 95%;
-    margin: 20px;
-    overflow-x: auto;
+  .product-info {
+    padding: 0 10px;
   }
 
-  .share-buttons {
-    flex-wrap: wrap;
-  }
-
-  .recommended-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .size-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   }
 }
-.out-of-stock-message {
-  padding: 12px;
-  background: #fff5f5;
-  color: #e53e3e;
-  border-radius: 4px;
-  text-align: center;
-  margin: 20px 0;
-}
-
 </style>

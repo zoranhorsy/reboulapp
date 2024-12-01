@@ -25,13 +25,24 @@ const Product = sequelize.define('Product', {
         type: DataTypes.STRING,
         allowNull: false
     },
-    // Au lieu d'un simple tableau de tailles, on stocke un objet avec les stocks
     sizeStock: {
         type: DataTypes.JSONB,
-        defaultValue:
-        // Exemple de structure:
-         { "S": 10, "M": 5, "L": 0, "XL": 3 },
+        defaultValue: { "S": 0, "M": 0, "L": 0, "XL": 0 },
+        // Format: { "S": 10, "M": 5, "L": 0, "XL": 3 }
+        get() {
+            const rawValue = this.getDataValue('sizeStock');
+            return rawValue || {};
+        }
     }
 });
+
+// Méthodes d'instance utiles
+Product.prototype.getTotalStock = function() {
+    return Object.values(this.sizeStock).reduce((sum, qty) => sum + (qty || 0), 0);
+};
+
+Product.prototype.checkSizeAvailability = function(size) {
+    return this.sizeStock[size] > 0;
+};
 
 module.exports = Product;
