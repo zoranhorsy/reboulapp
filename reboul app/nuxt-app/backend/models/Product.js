@@ -1,6 +1,5 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-
 const Product = sequelize.define('Product', {
     id: {
         type: DataTypes.UUID,
@@ -25,10 +24,17 @@ const Product = sequelize.define('Product', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    categories: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+      get() {
+          const rawValue = this.getDataValue('categories');
+          return rawValue || [];
+      }
+    },
     sizeStock: {
         type: DataTypes.JSONB,
         defaultValue: { "S": 0, "M": 0, "L": 0, "XL": 0 },
-        // Format: { "S": 10, "M": 5, "L": 0, "XL": 3 }
         get() {
             const rawValue = this.getDataValue('sizeStock');
             return rawValue || {};
