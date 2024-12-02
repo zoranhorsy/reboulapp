@@ -1,6 +1,9 @@
 <script setup>
 import { useProductStore } from '~/stores/useProductStore'
 import { ref, computed } from 'vue'
+import ImageUpload from '~/composant/ImageUpload.vue'
+import CategoryManager from "~/composant/CategoryManager.vue";
+
 
 const productStore = useProductStore()
 const errors = ref({})
@@ -13,6 +16,7 @@ const editingProduct = ref({
   description: '',
   images: [''],
   category: '',
+  categories: [],
   sizeStock: {
     'S': 0,
     'M': 0,
@@ -95,11 +99,11 @@ const updateProduct = async () => {
 }
 
 const deleteProduct = async (id) => {
-  if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+  if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.')) {
     try {
       await productStore.deleteProduct(id)
     } catch (error) {
-      console.error('Erreur lors de la suppression:', error)
+      alert(`Erreur lors de la suppression : ${error.message}`)
     }
   }
 }
@@ -117,6 +121,7 @@ const resetForm = () => {
   isEditing.value = false
   errors.value = {}
 }
+
 
 onMounted(async () => {
   await productStore.fetchProducts()
@@ -163,29 +168,14 @@ onMounted(async () => {
       </div>
 
       <div class="form-group">
-        <label>Image URL</label>
-        <input
-            type="text"
-            v-model="editingProduct.images[0]"
-        >
+        <label>Image du produit</label>
+        <ImageUpload v-model="editingProduct.images" />
       </div>
-
-      <div class="form-group">
-        <label>Catégorie</label>
-        <select
-            v-model="editingProduct.category"
-            :class="{ 'error': errors.category }"
-        >
-          <option value="">Sélectionner une catégorie</option>
-          <option v-for="cat in categories" :key="cat" :value="cat">
-            {{ cat }}
-          </option>
-        </select>
-        <span v-if="errors.category" class="error-message">{{ errors.category }}</span>
-      </div>
+      <div class="form-group row">
+      <CategoryManager v-model="editingProduct.categories" />
 
       <!-- Gestion du stock par taille -->
-      <div class="form-group">
+        <div class="form-group">
         <label>Stock par taille</label>
         <div class="size-stock-grid">
           <div
@@ -207,6 +197,7 @@ onMounted(async () => {
               {{ getSizeStockStatus(editingProduct.sizeStock[size]).text }}
             </span>
           </div>
+        </div>
         </div>
         <span v-if="errors.stock" class="error-message">{{ errors.stock }}</span>
       </div>
@@ -242,6 +233,7 @@ onMounted(async () => {
           <th>Image</th>
           <th>Nom</th>
           <th>Prix</th>
+          <th>Categories</th>
           <th>Stock par taille</th>
           <th>Actions</th>
         </tr>
@@ -257,6 +249,7 @@ onMounted(async () => {
           </td>
           <td>{{ product.name }}</td>
           <td>{{ product.price }} €</td>
+          <td>{{ product.categories?.[0]?.name || 'Non catégorisé' }} </td>
           <td>
             <div class="size-stock-display">
               <div
@@ -458,4 +451,13 @@ th, td {
     overflow-x: auto;
   }
 }
+
+.form-group.row {
+  @apply flex gap-4;
+}
+
+.form-group.row > * {
+  @apply flex-1;
+}
 </style>
+

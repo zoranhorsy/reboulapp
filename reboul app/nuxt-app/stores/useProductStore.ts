@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
+import { Product } from "~/types/product";
+import {categories} from "@vueuse/metadata";
 
 export const useProductStore = defineStore('products', {
     state: () => ({
-        products: [],
+        products: [] as Product[],
         loading: false,
         error: null
     }),
@@ -21,8 +23,10 @@ export const useProductStore = defineStore('products', {
         },
 
         async addProduct(product) {
-            console.log('Products sended:',
-                JSON.stringify(product));
+            const productToAdd = { ...product,
+            categories: product.categories || []
+            }
+                JSON.stringify(product)
             try {
                 const response = await fetch('http://localhost:3002/api/products', {
                     method: 'POST',
@@ -48,6 +52,7 @@ export const useProductStore = defineStore('products', {
                 // Créer une copie du produit sans l'image si c'est une base64
                 const productToUpdate = { ...updatedProduct,
                     sizeStock: updatedProduct.sizeStock || {} }
+                    categories: updatedProduct.categories || []
                 if (productToUpdate.images[0]?.startsWith('data:image')) {
                     // Si c'est une nouvelle image en base64, on pourrait :
                     // 1. Soit la stocker ailleurs et ne garder que l'URL
@@ -82,6 +87,7 @@ export const useProductStore = defineStore('products', {
                 console.error('Error deleting product:', error)
             }
         },
+
         async deleteImage(imageUrl: string) {
             try {
                 const filename = imageUrl.split('/').pop();
@@ -100,3 +106,4 @@ export const useProductStore = defineStore('products', {
 
 
 })
+

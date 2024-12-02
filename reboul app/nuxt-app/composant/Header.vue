@@ -12,7 +12,7 @@ let currentY = 0
 
 const handleScroll = () => {
   const scrollPosition = window.scrollY
-  headerOpacity.value = Math.max(0.2, 1 - scrollPosition / 200)
+  headerOpacity.value = Math.max(0.7, 1 - scrollPosition / 200)
 }
 
 const handleTouchStart = (e: TouchEvent) => {

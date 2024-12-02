@@ -46,29 +46,25 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
     try {
         const product = await Product.findByPk(req.params.id);
+        if (!product) return res.status(404).json({ message: "Produit non trouvé" });
 
-        if (!product) {
-            return res.status(404).json({ message: "Produit non trouvé" });
-        }
+        const { sizeStock, categories, ...otherData } = req.body;
 
-        // Nettoyer les valeurs du stock
-        if (req.body.sizeStock) {
-            const cleanSizeStock = {};
-            Object.entries(req.body.sizeStock).forEach(([size, quantity]) => {
-                cleanSizeStock[size] = Math.max(0, parseInt(quantity) || 0);
-            });
-            req.body.sizeStock = cleanSizeStock;
-        }
+        const updateData = {
+            ...otherData,
+            categories: categories || [],
+            sizeStock: sizeStock ? Object.entries(sizeStock).reduce((acc, [size, quantity]) => {
+                acc[size] = Math.max(0, parseInt(quantity) || 0);
+                return acc;
+            }, {}) : {}
+        };
 
-        await product.update(req.body);
+        await product.update(updateData);
         const updatedProduct = await Product.findByPk(req.params.id);
         res.json(updatedProduct);
     } catch (error) {
         console.error('Erreur mise à jour produit:', error);
-        res.status(400).json({
-            message: "Erreur lors de la mise à jour du produit",
-            details: error.message
-        });
+        res.status(400).json({ message: "Erreur lors de la mise à jour", details: error.message });
     }
 };
 
