@@ -23,7 +23,13 @@ export default defineNuxtConfig({
       enabled: true
     }
   },
-  modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss', '@vueuse/nuxt', '@nuxt/image'],
+  modules: [
+    '@pinia/nuxt',
+    '@nuxtjs/tailwindcss',
+    '@vueuse/nuxt',
+    '@nuxt/image',
+    '@nuxt/content'
+  ],
   // Ajoutez ces configurations pour résoudre les problèmes de build
   vite: {
     optimizeDeps: {
