@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { useProductStore } from '~/stores/useProductStore'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useCartStore } from '~/stores/useCartStore'
+import { ref, computed, onMounted } from 'vue'
 
 const productStore = useProductStore()
+const cartStore = useCartStore()
+const showModal = ref(false)
+const selectedProduct = ref(null)
+const selectedSize = ref('')
+const quantity = ref(1)
+const currentImageIndex = ref(0)
 
-// Données pour le slider hero
 const heroSlides = [
   {
     image: '/hero1.jpg',
@@ -24,9 +30,6 @@ const heroSlides = [
 ]
 
 const currentSlide = ref(0)
-const isSliding = ref(false)
-
-// Catégories
 const categories = [
   { name: 'T-Shirts', image: '/categories/tshirts.jpg', slug: 't-shirts' },
   { name: 'Sweaters', image: '/categories/sweaters.jpg', slug: 'sweaters' },
@@ -34,12 +37,7 @@ const categories = [
   { name: 'Outerwear', image: '/categories/outerwear.jpg', slug: 'outerwear' }
 ]
 
-// Newsletter
 const emailNewsletter = ref('')
-const newsletterStatus = ref('')
-const isValidEmail = ref(true)
-
-// Instagram Feed
 const instagramPosts = [
   { image: '/instagram/post1.jpg', likes: 124, link: '#' },
   { image: '/instagram/post2.jpg', likes: 231, link: '#' },
@@ -47,60 +45,50 @@ const instagramPosts = [
   { image: '/instagram/post4.jpg', likes: 332, link: '#' }
 ]
 
-// Products
 const featuredProducts = computed(() => {
   if (!productStore.products?.length) return []
-  return productStore.products
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 4)
+  return productStore.products.slice(0, 4)
 })
 
-// Méthodes
-const nextSlide = () => {
-  if (isSliding.value) return
-  isSliding.value = true
-  currentSlide.value = (currentSlide.value + 1) % heroSlides.length
-  setTimeout(() => isSliding.value = false, 600)
+const availableStock = computed(() => {
+  if (!selectedProduct.value) return 0
+  if (!selectedSize.value) {
+    // Retourne le total du stock si aucune taille n'est sélectionnée
+    return Object.values(selectedProduct.value.sizeStock).reduce((sum, stock) => sum + stock, 0)
+  }
+  return selectedProduct.value.sizeStock[selectedSize.value] || 0
+})
+
+const openModal = (product) => {
+  selectedProduct.value = product
+  showModal.value = true
+  selectedSize.value = ''
+  quantity.value = 1
+  currentImageIndex.value = 0
 }
 
-const prevSlide = () => {
-  if (isSliding.value) return
-  isSliding.value = true
-  currentSlide.value = (currentSlide.value - 1 + heroSlides.length) % heroSlides.length
-  setTimeout(() => isSliding.value = false, 600)
+const closeModal = () => {
+  showModal.value = false
+  selectedProduct.value = null
 }
 
-const validateEmail = (email: string) => {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return re.test(email)
-}
-
-const subscribeNewsletter = () => {
-  if (!emailNewsletter.value) {
-    newsletterStatus.value = 'Veuillez entrer une adresse email'
-    isValidEmail.value = false
+const addToCart = () => {
+  if (!selectedSize.value || !selectedProduct.value) {
+    alert('Veuillez sélectionner une taille')
     return
   }
 
-  if (!validateEmail(emailNewsletter.value)) {
-    newsletterStatus.value = 'Adresse email invalide'
-    isValidEmail.value = false
+  if (!availableStock.value) {
+    alert('Stock insuffisant')
     return
   }
 
-  newsletterStatus.value = 'Merci pour votre inscription !'
-  isValidEmail.value = true
-  emailNewsletter.value = ''
-  setTimeout(() => newsletterStatus.value = '', 3000)
+  cartStore.addToCart(selectedProduct.value, quantity.value, selectedSize.value)
+  closeModal()
 }
 
 onMounted(async () => {
-  // Charger les produits
   await productStore.fetchProducts()
-
-  // Démarrer le slider automatique
-  const interval = setInterval(nextSlide, 5000)
-  onUnmounted(() => clearInterval(interval))
 })
 </script>
 
@@ -116,20 +104,9 @@ onMounted(async () => {
           <div class="slide-content">
             <h1>{{ slide.title }}</h1>
             <p>{{ slide.subtitle }}</p>
-            <NuxtLink to="/products" class="cta-button">
-              Découvrir
-            </NuxtLink>
+            <NuxtLink to="/products" class="cta-button">Découvrir</NuxtLink>
           </div>
         </div>
-      </div>
-      <button class="slider-nav prev" @click="prevSlide">&lt;</button>
-      <button class="slider-nav next" @click="nextSlide">&gt;</button>
-      <div class="slider-dots">
-        <span v-for="(_, index) in heroSlides"
-              :key="index"
-              :class="{ active: currentSlide === index }"
-              @click="currentSlide = index">
-        </span>
       </div>
     </section>
 
@@ -155,13 +132,12 @@ onMounted(async () => {
       <div class="products-grid">
         <div v-for="product in featuredProducts"
              :key="product.id"
-             class="product-card">
+             class="product-card"
+             @click="openModal(product)">
           <div class="product-image">
             <img :src="product.images?.[0]" :alt="product.name">
             <div class="product-overlay">
-              <NuxtLink :to="`/products/${product.id}`" class="view-button">
-                Voir le produit
-              </NuxtLink>
+              <button class="view-button">Voir le produit</button>
             </div>
           </div>
           <div class="product-info">
@@ -172,29 +148,124 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- Concept Section -->
-    <section class="concept">
-      <div class="concept-content">
-        <h2>Notre Concept</h2>
-        <div class="concept-grid">
-          <div class="concept-item">
-            <i class="icon quality"></i>
-            <h3>Qualité Premium</h3>
-            <p>Des matériaux soigneusement sélectionnés pour une qualité exceptionnelle.</p>
-          </div>
-          <div class="concept-item">
-            <i class="icon sustainable"></i>
-            <h3>Mode Durable</h3>
-            <p>Une production responsable respectueuse de l'environnement.</p>
-          </div>
-          <div class="concept-item">
-            <i class="icon design"></i>
-            <h3>Design Unique</h3>
-            <p>Des créations originales pour un style qui vous ressemble.</p>
+    <!-- Product Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showModal && selectedProduct"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4"
+             @click="closeModal">
+          <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
+
+          <Transition name="modal-content">
+            <div class="relative bg-white w-full max-w-4xl rounded-xl overflow-auto max-h-[90vh] z-10"
+                 @click.stop>
+              <div class="relative p-6">
+      <div v-if="showModal && selectedProduct"
+           class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+           @click="closeModal">
+        <div class="bg-white max-w-4xl w-full rounded-xl overflow-hidden max-h-[90vh] overflow-y-auto"
+             @click.stop>
+          <div class="relative p-6">
+            <button @click="closeModal"
+                    class="absolute right-4 top-4 text-gray-500 hover:text-gray-700">
+              ✕
+            </button>
+
+            <div class="grid md:grid-cols-2 gap-8">
+              <!-- Images -->
+              <div class="product-images">
+                <div class="main-image-container relative">
+                  <!-- Stock Badges -->
+                  <div v-if="selectedProduct" class="absolute top-4 left-4 z-10 flex flex-col gap-2">
+     <span v-if="availableStock === 0"
+           class="bg-red-500/90 text-white px-3 py-1 rounded-md text-sm">
+       Rupture de stock
+     </span>
+                    <span v-else-if="selectedSize && availableStock < 5"
+                          class="bg-orange-500/90 text-white px-3 py-1 rounded-md text-sm">
+       Plus que {{ availableStock }} en stock
+     </span>
+                  </div>
+
+                  <img :src="selectedProduct.images[currentImageIndex]"
+                       :alt="selectedProduct.name"
+                       class="w-full aspect-square object-cover rounded-lg">
+                </div>
+
+                <!-- Thumbnails -->
+                <div class="flex gap-2 mt-4">
+                  <button v-for="(image, idx) in selectedProduct.images"
+                          :key="idx"
+                          @click="currentImageIndex = idx"
+                          class="w-20 h-20 rounded-lg overflow-hidden"
+                          :class="{ 'ring-2 ring-black': currentImageIndex === idx }">
+                    <img :src="image"
+                         :alt="selectedProduct.name"
+                         class="w-full h-full object-cover">
+                  </button>
+                </div>
+              </div>
+
+              <!-- Info -->
+              <div class="product-info">
+                <h2 class="text-2xl font-bold">{{ selectedProduct.name }}</h2>
+                <p class="text-xl mt-2">{{ selectedProduct.price }} €</p>
+                <p class="text-gray-600 mt-4">{{ selectedProduct.description }}</p>
+
+                <!-- Size Selection -->
+                <div class="mt-6">
+                  <h3 class="text-sm font-medium mb-2">Taille</h3>
+                  <div class="grid grid-cols-4 gap-2">
+                    <button v-for="(stock, size) in selectedProduct.sizeStock"
+                            :key="size"
+                            @click="selectedSize = size"
+                            :class="[
+                              'p-3 border rounded-lg transition',
+                              selectedSize === size ? 'bg-black text-white' : '',
+                              stock > 0 ? 'hover:border-black' : 'opacity-50'
+                            ]"
+                            :disabled="stock === 0">
+                      <span class="text-sm">{{ size }}</span>
+                      <span class="block text-xs mt-1">
+                        {{ stock > 0 ? `${stock} en stock` : 'Rupture' }}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Quantity -->
+                <div v-if="selectedSize && availableStock > 0" class="mt-6">
+                  <h3 class="text-sm font-medium mb-2">Quantité</h3>
+                  <select v-model="quantity"
+                          class="w-24 border rounded-lg p-2">
+                    <option v-for="n in Math.min(availableStock, 10)"
+                            :key="n"
+                            :value="n">
+                      {{ n }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Add to Cart -->
+                <button @click="addToCart"
+                        :disabled="!selectedSize || availableStock === 0"
+                        class="w-full py-3 bg-black text-white rounded-lg mt-6
+                               disabled:opacity-50 disabled:cursor-not-allowed">
+                  {{ !selectedSize ? 'Sélectionnez une taille' :
+                    availableStock === 0 ? 'Rupture de stock' :
+                        'Ajouter au panier' }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </section>
+              </div>
+            </div>
+          </Transition>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Instagram Feed -->
     <section class="instagram-feed">
@@ -220,318 +291,228 @@ onMounted(async () => {
         <h2>Restez informé</h2>
         <p>Inscrivez-vous à notre newsletter pour recevoir nos dernières actualités</p>
         <div class="newsletter-form">
-          <input
-              type="email"
-              v-model="emailNewsletter"
-              placeholder="Votre adresse email"
-              :class="{ 'invalid': !isValidEmail }"
-          >
-          <button @click="subscribeNewsletter">S'inscrire</button>
+          <input type="email"
+                 v-model="emailNewsletter"
+                 placeholder="Votre adresse email"
+                 class="rounded-lg">
+          <button class="bg-white text-black rounded-lg">S'inscrire</button>
         </div>
-        <p class="newsletter-status" :class="{ 'error': !isValidEmail }">
-          {{ newsletterStatus }}
-        </p>
       </div>
     </section>
   </div>
 </template>
-<style>
-/* Base */
+
+
+<style scoped>
+/* Layout */
 .home {
-  width: 100%;
+  @apply w-full overflow-x-hidden;
 }
 
-/* Hero Slider */
+/* Hero Section */
 .hero-slider {
-  position: relative;
-  height: 80vh;
-  overflow: hidden;
+  @apply relative h-[60vh] md:h-[70vh] lg:h-[80vh] overflow-hidden;
 }
 
 .slides-container {
-  height: 100%;
-  display: flex;
-  transition: transform 0.6s ease;
+  @apply h-full flex transition-transform duration-500;
 }
 
 .slide {
-  min-width: 100%;
-  height: 100%;
-  background-size: cover;
-  background-position: center;
-  position: relative;
+  @apply min-w-full h-full bg-cover bg-center relative;
 }
 
 .slide-content {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  color: white;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 2rem;
-  border-radius: 8px;
+  @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+  text-center text-white bg-black/50 p-4 md:p-8 rounded-lg
+  w-[90%] max-w-lg;
 }
 
 .slide-content h1 {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  @apply text-2xl md:text-4xl lg:text-5xl font-bold mb-2;
 }
 
-.slider-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  border: none;
-  padding: 1rem;
-  cursor: pointer;
-  font-size: 1.5rem;
+.slide-content p {
+  @apply text-sm md:text-base lg:text-lg mb-4;
 }
 
-.slider-nav.prev { left: 1rem; }
-.slider-nav.next { right: 1rem; }
-
-.slider-dots {
-  position: absolute;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.5rem;
+/* Sections */
+.categories,
+.featured-products,
+.instagram-feed {
+  @apply py-8 md:py-12 lg:py-16 px-4 md:px-6 max-w-7xl mx-auto;
 }
 
-.slider-dots span {
-  width: 10px;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 50%;
-  cursor: pointer;
+.section-title {
+  @apply text-xl md:text-2xl font-bold mb-6 md:mb-8 text-center;
 }
 
-.slider-dots span.active {
-  background: white;
-}
-
-/* Categories */
-.categories {
-  padding: 4rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.categories h2 {
-  text-align: center;
-  margin-bottom: 2rem;
-  font-size: 2rem;
+/* Grids */
+.categories-grid,
+.products-grid,
+.instagram-grid {
+  @apply grid gap-4 md:gap-6;
 }
 
 .categories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
+  @apply grid-cols-2 md:grid-cols-4;
 }
 
-.category-card {
-  position: relative;
-  height: 300px;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.category-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.category-card:hover img {
-  transform: scale(1.1);
-}
-
-.category-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-/* Featured Products */
-.featured-products {
-  padding: 4rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.view-button {
-  color: #dddddd;
-}
 .products-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-}
-
-.product-card {
-  border: 1px solid #eee;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.product-image {
-  position: relative;
-  height: 300px;
-}
-
-.product-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.product-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.product-card:hover .product-overlay {
-  opacity: 1;
-}
-
-/* Concept Section */
-.concept {
-  background: #f8f8f8;
-  padding: 4rem 2rem;
-}
-
-.concept-content {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.concept-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-  margin-top: 2rem;
-}
-
-.concept-item {
-  text-align: center;
-  padding: 2rem;
-}
-
-/* Instagram Feed */
-.instagram-feed {
-  padding: 4rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  @apply grid-cols-2 sm:grid-cols-3 lg:grid-cols-4;
 }
 
 .instagram-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  @apply grid-cols-2 md:grid-cols-4;
 }
 
-.instagram-post {
-  position: relative;
-  aspect-ratio: 1;
+/* Product Cards */
+.product-card {
+  @apply border border-gray-200 rounded-lg overflow-hidden
+  transition-transform duration-200 hover:-translate-y-1
+  cursor-pointer bg-white shadow-sm hover:shadow-md;
 }
 
-.instagram-post img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.product-image {
+  @apply relative h-48 sm:h-56 md:h-64;
 }
 
-.instagram-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  opacity: 0;
-  transition: opacity 0.3s ease;
+.product-image img {
+  @apply w-full h-full object-cover;
 }
 
-.instagram-post:hover .instagram-overlay {
-  opacity: 1;
+.product-overlay {
+  @apply absolute inset-0 bg-black/50 flex items-center justify-center
+  opacity-0 transition-opacity duration-200;
+}
+
+.product-card:hover .product-overlay {
+  @apply opacity-100;
+}
+
+.view-button {
+  @apply px-4 py-2 bg-white text-black rounded-md text-sm
+  transform transition-transform duration-200
+  hover:scale-105;
+}
+
+.product-info {
+  @apply p-3 md:p-4;
+}
+
+.product-info h3 {
+  @apply text-sm md:text-base font-medium mb-1;
+}
+
+.price {
+  @apply text-base md:text-lg font-semibold;
+}
+
+/* Modal */
+.modal-backdrop {
+  @apply fixed inset-0 bg-black/50 z-50
+  flex items-center justify-center p-4;
+}
+
+.modal-content {
+  @apply bg-white w-full max-w-4xl rounded-xl overflow-hidden
+  max-h-[90vh] overflow-y-auto relative;
+}
+
+.modal-body {
+  @apply p-4 md:p-6 lg:p-8;
+}
+
+.modal-grid {
+  @apply grid md:grid-cols-2 gap-6 md:gap-8;
+}
+
+.modal-images {
+  @apply space-y-4;
+}
+
+.modal-main-image {
+  @apply w-full aspect-square rounded-lg object-cover;
+}
+
+.modal-thumbnails {
+  @apply flex gap-2 overflow-x-auto;
+}
+
+.modal-thumbnail {
+  @apply w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden
+  cursor-pointer transition-opacity duration-200
+  hover:opacity-80;
 }
 
 /* Newsletter */
 .newsletter {
-  background: #000;
-  color: white;
-  padding: 4rem 2rem;
-  text-align: center;
+  @apply bg-black text-white py-12 md:py-16 px-4 text-center;
 }
 
 .newsletter-content {
-  max-width: 600px;
-  margin: 0 auto;
+  @apply max-w-xl mx-auto;
 }
 
 .newsletter-form {
-  display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
+  @apply flex flex-col sm:flex-row gap-3 mt-6;
 }
 
-.newsletter-form input {
-  flex: 1;
-  padding: 1rem;
-  border: none;
-  border-radius: 4px;
+.newsletter-input {
+  @apply flex-1 px-4 py-2 rounded-lg border-2 border-transparent
+  focus:border-white bg-white/10 text-white
+  placeholder-white/60;
 }
 
-.newsletter-form input.invalid {
-  border: 2px solid red;
+.newsletter-button {
+  @apply px-6 py-2 bg-white text-black rounded-lg
+  transition-colors hover:bg-gray-100;
 }
 
-.newsletter-form button {
-  padding: 1rem 2rem;
-  background: white;
-  color: black;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.newsletter-status {
-  margin-top: 1rem;
-  height: 20px;
-}
-
-.newsletter-status.error {
-  color: red;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .slide-content h1 {
-    font-size: 2rem;
+/* Responsive Adjustments */
+@media (max-width: 640px) {
+  .modal-content {
+    @apply h-full max-h-full rounded-none;
   }
 
   .newsletter-form {
-    flex-direction: column;
+    @apply space-y-2;
   }
+}
 
-  .concept-grid {
-    grid-template-columns: 1fr;
+@media (min-width: 768px) {
+  .product-card {
+    @apply hover:border-gray-300;
   }
+}
+
+@media (min-width: 1024px) {
+  .product-info {
+    @apply p-5;
+  }
+}
+.modal-enter-active,
+.modal-leave-active {
+  transition: all 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-content-enter-active,
+.modal-content-leave-active {
+  transition: all 0.3s ease;
+}
+
+.modal-content-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.modal-content-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
 }
 </style>

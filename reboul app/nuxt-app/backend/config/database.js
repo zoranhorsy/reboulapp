@@ -2,11 +2,11 @@ const { Sequelize } = require('sequelize');
 
 const sequelize = new Sequelize({
     database: 'reboul',
-    username: process.env.USER,
-    password: '',
+    username: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
     host: 'localhost',
     dialect: 'postgres',
-    logging: console.log // Ajout du logging
+    logging: console.log
 });
 
 // Test de connexion

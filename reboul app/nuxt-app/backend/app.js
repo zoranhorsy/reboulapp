@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const sequelize = require('./config/database');
+const db = require('./models');
 const productRoutes = require('./routes/products');
 const uploadRoutes = require('./routes/upload');
 
@@ -15,27 +15,13 @@ app.use('/api/upload', uploadRoutes);
 
 const startServer = async () => {
     try {
-        // Test DB connection
-        await sequelize.authenticate();
+        await db.sequelize.authenticate();
         console.log('Connected to reboul database..');
 
-        // Sync DB with changes
-        await sequelize.sync({ alter: true });
+        await db.sequelize.sync({ alter: true });
 
-        // Start server
-        const server = app.listen(PORT, () => {
+        app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
-        });
-
-        // Handle server errors
-        server.on('error', (error) => {
-            if (error.code === 'EADDRINUSE') {
-                console.log(`Port ${PORT} is busy, trying ${PORT + 1}`);
-                server.close();
-                startServer(PORT + 1);
-            } else {
-                console.error('Server error:', error);
-            }
         });
     } catch (error) {
         console.error('Error starting server:', error);

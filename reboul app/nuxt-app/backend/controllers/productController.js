@@ -1,83 +1,68 @@
-const Product = require('../models/Product');
+const db = require('../models');
+const Product = db.Product;
 
 exports.createProduct = async (req, res) => {
     try {
-        // Valider les données entrantes
-        const { name, price, description, category, sizeStock } = req.body;
+        const { name, price, description, categories, sizeStock } = req.body;
 
-        if (!name || !price || !category) {
+        if (!name || !price || !categories?.length) {
             return res.status(400).json({
-                message: "Données manquantes",
-                details: "Le nom, le prix et la catégorie sont requis"
-            });
-        }
-
-        // Valider le format du sizeStock
-        if (sizeStock && typeof sizeStock !== 'object') {
-            return res.status(400).json({
-                message: "Format invalide",
-                details: "sizeStock doit être un objet"
-            });
-        }
-
-        // Nettoyer les valeurs du stock
-        const cleanSizeStock = {};
-        if (sizeStock) {
-            Object.entries(sizeStock).forEach(([size, quantity]) => {
-                cleanSizeStock[size] = Math.max(0, parseInt(quantity) || 0);
+                message: "Données incomplètes"
             });
         }
 
         const product = await Product.create({
-            ...req.body,
-            sizeStock: cleanSizeStock
+            name,
+            price,
+            description,
+            categories,
+            sizeStock: sizeStock || { "S": 0, "M": 0, "L": 0, "XL": 0 }
         });
 
         res.status(201).json(product);
     } catch (error) {
-        console.error('Erreur création produit:', error);
         res.status(400).json({
-            message: "Erreur lors de la création du produit",
-            details: error.message
+            message: "Erreur création produit",
+            error: error.message
         });
     }
 };
 
 exports.updateProduct = async (req, res) => {
     try {
+        const { name, price, description, categories, sizeStock } = req.body;
         const product = await Product.findByPk(req.params.id);
-        if (!product) return res.status(404).json({ message: "Produit non trouvé" });
 
-        const { sizeStock, categories, ...otherData } = req.body;
+        if (!product) {
+            return res.status(404).json({
+                message: "Produit non trouvé"
+            });
+        }
 
-        const updateData = {
-            ...otherData,
-            categories: categories || [],
-            sizeStock: sizeStock ? Object.entries(sizeStock).reduce((acc, [size, quantity]) => {
-                acc[size] = Math.max(0, parseInt(quantity) || 0);
-                return acc;
-            }, {}) : {}
-        };
+        await product.update({
+            name,
+            price,
+            description,
+            categories,
+            sizeStock
+        });
 
-        await product.update(updateData);
-        const updatedProduct = await Product.findByPk(req.params.id);
-        res.json(updatedProduct);
+        res.json(await product.reload());
     } catch (error) {
-        console.error('Erreur mise à jour produit:', error);
-        res.status(400).json({ message: "Erreur lors de la mise à jour", details: error.message });
+        res.status(400).json({
+            message: "Erreur mise à jour",
+            error: error.message
+        });
     }
 };
 
 exports.getAllProducts = async (req, res) => {
     try {
-        const products = await Product.findAll();
-        res.json(products);
+        const products = await Product.findAll(); // Vérifiez la requête Sequelize ici
+        res.status(200).json(products);
     } catch (error) {
-        console.error('Erreur récupération produits:', error);
-        res.status(500).json({
-            message: "Erreur lors de la récupération des produits",
-            details: error.message
-        });
+        console.error('Erreur lors de la récupération des produits:', error);
+        res.status(500).json({ error: 'Erreur lors de la récupération des produits' });
     }
 };
 

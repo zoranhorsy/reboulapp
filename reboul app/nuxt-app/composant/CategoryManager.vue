@@ -3,7 +3,8 @@ const categories = ref([
   { id: 1, name: 'T-shirts', slug: 't-shirts' },
   { id: 2, name: 'Sweaters', slug: 'sweaters' },
   { id: 3, name: 'Pants', slug: 'pants' },
-  { id: 4, name: 'Outerwear', slug: 'outerwear' }
+  { id: 4, name: 'Outerwear', slug: 'outerwear' },
+  { id: 4, name: 'Chaussures', slug: 'Chaussures' }
 ])
 
 const newCategory = ref('')
@@ -32,8 +33,8 @@ const addCategory = () => {
   newCategory.value = ''
 }
 
-const startEdit = (category) => {
-  editingCategory.value = { ...category }
+const startEdit = (categories) => {
+  editingCategory.value = { ...categories }
 }
 
 const saveEdit = () => {
