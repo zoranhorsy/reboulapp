@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "tripleseptinteractive",
+    "password": "postgres",
+    "database": "reboul",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "votre_nom_utilisateur",
+    "password": "votre_mot_de_passe",
+    "database": "reboul_test",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "votre_nom_utilisateur",
+    "password": "votre_mot_de_passe",
+    "database": "reboul_production",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  }
+}
